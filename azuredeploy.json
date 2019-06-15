@@ -29,24 +29,18 @@
         "description": "PFSense NVA Manchine Name"
       }
     },
-    "ImageID": {
+    "StorageAccountName": {
       "type": "string",
       "metadata": {
-        "description": "ResourceID of your image"
+          "description": "Name of the storage account where the vhd file is stored"
       }
     },
-    "adminUsername": {
+    "sourceVhdPath": {
       "type": "string",
       "metadata": {
-        "description": "Default Admin username"
+          "description": "Path to the vhd file on the storage account (e.g. /vhd/pfsense.vhd)"
       }
-    },
-    "adminPassword": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Default Admin password"
-      }
-    },
+  },
    "virtualNetworkName": {
     "type": "string",
     "defaultValue": "PFSense-VNET",
@@ -85,37 +79,34 @@
     "subnet1Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('subnet1Name'))]",
     "subnet2Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('subnet2Name'))]",
     "networkSecurityGroupName": "PFSense-NSG",
-    "location": "[resourceGroup().location]"
+    "location": "[resourceGroup().location]",
+    "sourceVhdUri": "[concat('https://', parameters('storageAccountName'), '.blob.core.windows.net', parameters('sourceVhdPath'))]",
+    "managedDiskName": "[concat(parameters('virtualMachineName'),'-OSDisk')]"
   },
   "resources": [
     {
       "name": "[parameters('virtualMachineName')]",
       "type": "Microsoft.Compute/virtualMachines",
+      "name": "[parameters('virtualMachineName')]",
       "apiVersion": "2018-06-01",
       "location": "[variables('location')]",
       "comments": "This is the virtual machine that you're building.",
       "dependsOn": [
         "[variables('nic1')]",
-        "[variables('nic2')]"
+        "[variables('nic2')]",
+        "[resourceId('Microsoft.Compute/disks/', variables('managedDiskName'))]"
       ],
       "properties": {
-        "osProfile": {
-          "computerName": "[parameters('virtualMachineName')]",
-          "adminUsername": "[parameters('adminUsername')]",
-          "adminPassword": "[parameters('adminPassword')]"
-        },
         "hardwareProfile": {
           "vmSize": "[parameters('virtualMachineSize')]"
         },
         "storageProfile": {
           "osDisk": {
-              "createOption": "fromImage",
+              "createOption": "Attach",
               "managedDisk": {
-                  "storageAccountType": "StandardSSD_LRS"
-              }
-          },
-          "imageReference": {
-              "id": "[parameters('ImageID')]"
+                  "id": "[resourceId('Microsoft.Compute/disks/', variables('managedDiskName'))]"
+              },
+              "osType": "Linux"
           }
       },
         "networkProfile": {
@@ -136,6 +127,23 @@
         }
       }
     },
+    {
+      "name": "[variables('managedDiskName')]",
+      "type": "Microsoft.Compute/disks",
+      "apiVersion": "2018-06-01",
+      "location": "[variables('location')]",
+      "tags": {},
+      "sku": {
+          "name": "StandardSSD_LRS"
+      },
+      "properties": {
+          "osType": "Linux",
+          "creationData": {
+              "createOption": "Import",
+              "sourceUri": "[variables('sourceVhdUri')]"
+          }
+      }
+  },
     {
       "type": "Microsoft.Network/virtualNetworks",
       "name": "[parameters('virtualNetworkName')]",
